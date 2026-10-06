@@ -1,0 +1,300 @@
+<USER_REQUEST>
+@[/Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/Trymindhub2api] and @[/Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/GeminiWeb2api] 
+
+taking ideas from above two project, I want you to create another project here @[/Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/Codecraftapi.com] 
+
+where it should follow the below code. So that I can give or include multiple account as pool and can get openai compatible endpoint. Also The dashboad should have all the necessary settings and there should be input field to submit the CONSTANTS easily. Now do your own Research and create the project. I am planning to push it to github at first with dockerfile then through dockerfile, I will deploy it at my hetzner VPS using coolify UI and all the setup should be auto completed and the account data should be stored during redeploy.
+
+import urllib.parse
+import json
+import time
+from flask import Flask, request, Response, jsonify
+from curl_cffi import requests
+
+# ==========================================
+# CONSTANTS (Paste your values here)
+# ==========================================
+CF_CLEARANCE = "YOUR_CF_CLEARANCE_HERE" 
+REMEMBER_WEB_NAME = "YOUR_REMEMBER_WEB_NAME_HERE"
+REMEMBER_WEB_VALUE = "YOUR_REMEMBER_WEB_VALUE_HERE"
+
+app = Flask(__name__)
+active_session = None
+xsrf_token = None
+
+def create_authenticated_session():
+    print("Authenticating with Codecraft...")
+    session = requests.Session(impersonate="chrome120")
+    session.cookies.set("cf_clearance", CF_CLEARANCE, domain="codecraftapi.com")
+    session.cookies.set(REMEMBER_WEB_NAME, REMEMBER_WEB_VALUE, domain="codecraftapi.com")
+
+    response = session.get("https://codecraftapi.com/dashboard/playground")
+    if response.status_code == 200:
+        xsrf_cookie = session.cookies.get("XSRF-TOKEN")
+        if xsrf_cookie:
+            return session, urllib.parse.unquote(xsrf_cookie)
+    return None, None
+
+@app.route('/v1/models', methods=['GET'])
+def get_models():
+    return jsonify({
+        "object": "list",
+        "data": [{"id": "gemini-3.1-pro", "object": "model", "created": int(time.time()), "owned_by": "google"}]
+    })
+
+@app.route('/v1/chat/completions', methods=['POST'])
+def chat_completions():
+    req_data = request.json
+    
+    # --- 1. Dynamic Payload Construction ---
+    payload = {
+        "model": req_data.get("model", "gemini-3.1-pro"),
+        "messages": req_data.get("messages", []),
+        "temperature": req_data.get("temperature", 1.0),
+        "max_tokens": req_data.get("max_tokens", 8192),
+        "top_p": req_data.get("top_p", 1.0),
+        "frequency_penalty": req_data.get("frequency_penalty", 0.0),
+        "presence_penalty": req_data.get("presence_penalty", 0.0),
+        "system_prompt": req_data.get("system_prompt", None)
+    }
+
+    # Codecraft prefers System Prompts at the root level.
+    # If OmniRoute sends it inside the messages array, we extract it.
+    if payload["messages"] and payload["messages"][0].get("role") == "system":
+        payload["system_prompt"] = payload["messages"][0].get("content")
+
+    # Forward Advanced Features: Tools (for Web Search/Funcs) and JSON Format.
+    # Vision (Images) is natively forwarded because it resides inside `messages`.
+    for key in ["tools", "tool_choice", "response_format"]:
+        if key in req_data:
+            payload[key] = req_data[key]
+
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/json",
+        "referer": "https://codecraftapi.com/dashboard/playground",
+        "x-xsrf-token": xsrf_token,
+        "x-requested-with": "XMLHttpRequest"
+    }
+
+    def generate():
+        response = active_session.post(
+            "https://codecraftapi.com/dashboard/playground", 
+            headers=headers, 
+            json=payload, 
+            stream=True
+        )
+
+        for line in response.iter_lines():
+            if line and line.startswith(b"data: "):
+                raw_data = line[6:].decode('utf-8')
+                
+                try:
+                    data = json.loads(raw_data)
+                    
+                    # --- 2. Advanced Stream Parsing ---
+                    delta = {}
+                    
+                    # Standard Content
+                    if data.get("content"):
+                        delta["content"] = data["content"]
+                        
+                    # Reasoning Block (For CoT models like DeepSeek-R1 / O1)
+                    if data.get("reasoning"):
+                        delta["reasoning"] = data["reasoning"]
+                        
+                    # Function/Tool Calling
+                    if data.get("tool_calls"):
+                        delta["tool_calls"] = data["tool_calls"]
+                    
+                    # Yield the chunk only if it contains actual data
+                    if delta:
+                        chunk = {
+                            "id": f"chatcmpl-{int(time.time())}",
+                            "object": "chat.completion.chunk",
+                            "model": req_data.get("model", payload["model"]),
+                            "choices": [{"index": 0, "delta": delta}]
+                        }
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                    
+                    # --- 3. Finalization & Token Usage Stats ---
+                    if data.get("done") == True:
+                        # OmniRoute uses usage stats for quota/balance management
+                        if "usage" in data:
+                            usage_chunk = {
+                                "id": f"chatcmpl-{int(time.time())}",
+                                "object": "chat.completion.chunk",
+                                "model": req_data.get("model", payload["model"]),
+                                "choices": [],
+                                "usage": data["usage"]
+                            }
+                            yield f"data: {json.dumps(usage_chunk)}\n\n"
+                            
+                        yield "data: [DONE]\n\n"
+                        
+                except json.JSONDecodeError:
+                    pass
+
+    return Response(generate(), mimetype='text/event-stream')
+
+
+if __name__ == '__main__':
+    active_session, xsrf_token = create_authenticated_session()
+    if active_session:
+        print("✅ Ultimate Bridge is running! Point OmniRoute to http://127.0.0.1:5000/v1")
+        app.run(host='127.0.0.1', port=5000)
+    else:
+        print("❌ Failed to authenticate. Check cookies.")
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-06T15:54:55+06:00.
+
+The user's current state is as follows:
+Active Document: /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/dashboard/templates/settings.html (LANGUAGE_HTML)
+Cursor is on line: 1
+Other open documents:
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/dashboard/templates/settings.html (LANGUAGE_HTML)
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/dashboard/templates/tokens.html (LANGUAGE_HTML)
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/dashboard/templates/base.html (LANGUAGE_HTML)
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/auth/session.py (LANGUAGE_PYTHON)
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/static/app.js (LANGUAGE_JAVASCRIPT)
+
+The user has mentioned some items in the form @[ITEM]. Here is extra information about the items that were mentioned by the user, in the order that they appear:
+
+@[/Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/Trymindhub2api] is a [File]:
+/Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/Trymindhub2api
+@[/Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/GeminiWeb2api] is a [File]:
+/Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/GeminiWeb2api
+@[/Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/Codecraftapi.com] is a [File]:
+/Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/Codecraftapi.com
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from None to Gemini 3.1 Pro (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+<USER_REQUEST>
+Continue from where you stopped.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-06T15:55:37+06:00.
+
+The user's current state is as follows:
+Active Document: /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/dashboard/templates/settings.html (LANGUAGE_HTML)
+Cursor is on line: 1
+Other open documents:
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/dashboard/templates/tokens.html (LANGUAGE_HTML)
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/dashboard/templates/base.html (LANGUAGE_HTML)
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/auth/session.py (LANGUAGE_PYTHON)
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/static/app.js (LANGUAGE_JAVASCRIPT)
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/config.py (LANGUAGE_PYTHON)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Gemini 3.1 Pro (High) to Claude Sonnet 5.5 (Medium). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+<USER_REQUEST>
+Run the server here at local host so that I can check and test at first if is working or not.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-06T16:20:02+06:00.
+
+The user's current state is as follows:
+Active Document: /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/dashboard/templates/settings.html (LANGUAGE_HTML)
+Cursor is on line: 1
+Other open documents:
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/config.py (LANGUAGE_PYTHON)
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/dashboard/templates/settings.html (LANGUAGE_HTML)
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/dashboard/templates/tokens.html (LANGUAGE_HTML)
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/dashboard/templates/base.html (LANGUAGE_HTML)
+- /Users/bondhon/Bondhon/Github Project/Test/Coolify_VPS_Project/TinkerbyShopify2api/app/auth/session.py (LANGUAGE_PYTHON)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Claude Sonnet 5.5 (Medium) to Gemini 3.1 Pro (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+<USER_REQUEST>
+Good, there should be option to delete the logs also when needed and schedule to auto delet the logs after 3 days. So that It can be storage optimize and the server will be clean and save storage. 
+Again there is plan limit for each account so you should get the plan token data using below cURL:
+curl --url 'https://codecraftapi.com/dashboard/billing/plan' \
+  -H 'accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7' \
+  -H 'accept-language: en-US,en;q=0.9' \
+  -H 'cache-control: no-cache' \
+  -b 'remember_web_59ba36addc2b2f9401580f014c7f58ea4e30989d=eyJpdiI6Iks4U2JrZWIxbWZtL2R2eGh4TWprclE9PSIsInZhbHVlIjoiVVZWUXpzRzhpeUtEcVIzTlpHR2hYNFpPQ1RsTS9rYXM2aktPUWpFdDEwRXVLaWZkY05WR2QvSVRDMTJMdHZDdElGY1NWZDBJejJwUnd3OEtVakpKK0N1MW44WkwwQjUyLytFQzVsdzQ0T092UVdKeWJ4YWVLSmZ0MTRGTFZpYWJLZjAzdjVPS04yanB1Q0xPaE5hRXgybUZvVTdDeDdNMDVVbGsvd0RaZmY3WGJGZFFSR1ZkK0s0TCtzUythZ2xVT0ZYUWo1czJLVVNPY0U0cm1sb1lJMzIzaW80dE1SejRKZDYwS1hsNW9IWT0iLCJtYWMiOiI4ZDMxNjcyNmNhZWE0MmQ5NTdjZDFlMzNmMDExYThkZDk2YmFiNDQ0ZTkxODg1YjEyMzZmYzUyZmI1NTlmNzZkIiwidGFnIjoiIn0%3D; cf_clearance=Aom25TnSvryUZsl5WrZSt0a8iH5dgtYExLxpMTEs0r4-1791282191-1.2.1.1-0WlYXDBvOrKHZQa532x4Ks2CnNWYfB7NcGcwaZJZYD2O7e9J8H5aPCthgEmhsxq7x6ViDp79wAbnxc5TN4ymHsOmOuVa8Nz2dxiiiiDeDsBWBNKGK4LP1iQESGpBHaXOY5qyyv6CF_KLE51R7Ct6Bjben8qr47N6X8UR1v_8OnO.KR.RgKnanWnMUyaO__avjsJX1OqgXk_jNJOGFqP0YVA4CvZn8HgYjcQ6Iaq3d3yqgyTF_d48fZ_SuPhK8y.e.7fUnHia23WEo.OsQJzFE8NxLYpLofNynKKxcWQsD2oPAm931w2QDcNLzh9SBmH9jbBKCjOlDp26UZ1_4BlMH.bWazsNl_iNRqeu4AnnSjH5YI7yfhydU0byTB3tg9TwqbYAIQv1IvEHIUo2gu4L6Q; XSRF-TOKEN=eyJpdiI6IlFhM1FyeXpnbnFpcXBsN2U0MGkvM3c9PSIsInZhbHVlIjoianNSU0NWQmRDaHdkZjJ3aThZdVFxWkNvRmloK3NRSG4ydENUNERaQVZHQTNDMTliK2RjcVZHV2pFcEZKdnlsaUtBNkNwb1N3OVdKOG9sM0M1Mm5ENFBQQW5kSFZNQTlmRXFpMnRPNkgwVWl1RnVlM0lyK29VeFNzeXJJRU5INTgiLCJtYWMiOiI5NTg5OGY4Nzk2OGJmZmM1OTg3OTJlZWJhYWQ2OTdkN2FlOWZiYmRiYWM1MTgxMDllYzMwYjViN2FiMDhkNDdjIiwidGFnIjoiIn0%3D; codecraft-session=eyJpdiI6ImNpUzdrUUk3NlNhS3BWekJCdWMwNlE9PSIsInZhbHVlIjoiTHc1ZDRYc2ZGb1lTSW9Tc0N4TXhLdnFrTWI0MldHWUtKdEFSQ1VIdzdWYmh4b3paK0JqRGdoUWJzK0JzWUZzWWhoVUVRc0lpcE9ZT2s5RDV1TTNQVUtjblVuN1lMQTJRdWpNTDFyVVQ2bUNJWlI5NUZPaEwvTEs0TUFJT2lOOEIiLCJtYWMiOiI0YzE5MzgyNmZhZTc5MzViOWZjZjNjNDIyYzJlZTFiNmM1NGQ1Y2M3MGZmNDBkYjg4MGNjOThlMGUzYTVkYTgyIiwidGFnIjoiIn0%3D' \
+  -H 'pragma: no-cache' \
+  -H 'priority: u=0, i' \
+  -H 'referer: https://codecraftapi.com/dashboard/usage' \
+  -H 'sec-ch-ua: "Chromium";v="154", "Google Chrome";v="154", "Not A(Brand";v="99"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: document' \
+  -H 'sec-fetch-mode: navigate' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'sec-fetch-user: ?1' \
+  -H 'upgrade-insecure-requests: 1' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
+
+
+Response:
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    
+    <title>Plan — CodeCraft API</title>
+    <meta name="description" content="Access powerful AI models through one OpenAI-compatible API. Chat completions, streaming, tool calling, vision, and embeddings — with transparent per-token pricing.">
+    <link rel="canonical" href="https://codecraftapi.com/dashboard/billing/plan">
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+    <meta name="theme-color" content="#D97757">
+
+    
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="CodeCraft API">
+    <meta property="og:title" content="Plan — CodeCraft API">
+    <meta property="og:description" content="Access powerful AI models through one OpenAI-compatible API.">
+    <meta property="og:url" content="https://codecraftapi.com/dashboard/billing/plan">
+    <meta property="og:image" content="https://codecraftapi.com/og-image.png">
+    <meta property="og:locale" content="en_US">
+
+    
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Plan — CodeCraft API">
+    <meta name="twitter:description" content="Access powerful AI models through one OpenAI-compatible API.">
+    <meta name="twitter:image" content="https://codecraftapi.com/og-image.png">
+
+    
+    
+                <link rel="icon" href="https://codecraftapi.com/storage/branding/4FNYY6kXeIAwp9AIexKfZa1LzkF2RCxQfgm4VzVn.png">
+        <link rel="apple-touch-icon" href="https://codecraftapi.com/storage/branding/4FNYY6kXeIAwp9AIexKfZa1LzkF2RCxQfgm4VzVn.png">
+    
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <link rel="preload" as="style" href="https://codecraftapi.com/build/assets/app-BrqJJFHZ.css" /><link rel="modulepreload" as="script" href="https://codecraftapi.com/build/assets/app-o_W20pGZ.js" /><link rel="stylesheet" href="https://codecraftapi.com/build/assets/app-BrqJJFHZ.css" /><script type="module" src="https://codecraftapi.com/build/assets/app-o_W20pGZ.js"></script>
+    
+    
+    </head>
+<body class="min-h-screen flex flex-col">
+    <div x-data="{ sidebarOpen: false }" class="min-h-screen flex bg-cream-100 ">
+    
+    <aside class="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-white border-r border-cream-200 z-30">
+        <div class="flex items-center h-16 px-6 border-b border-cream-200">
+            <a href="https://codecraftapi.com/dashboard" class="flex items-center gap-2.5 text-ink-900">
+                <img src="https://codecraftapi.com/storage/branding/DrrqTKkGJxSqzx1OkHHpnY0r0tBANfxDpLR0Td0h.png"
+         alt="CodeCraft API"
+         class="w-8 h-8 rounded-lg object-cover flex-shrink-0">
+
+    <span class="font-serif text-lg font-semibold">CodeCraft API</span>
+            </a>
+        </div>
+        <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+            
+                                            <a href="https://codecraftapi.com/dashboard"
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                          text-ink-700 hover:bg-cream-200">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                    </svg>
+                    Overview
+                </a>
+                                            <a href="https://codecraftapi.com/dashboard/playground"

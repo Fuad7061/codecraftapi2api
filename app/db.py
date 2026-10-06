@@ -141,6 +141,12 @@ async def vacuum() -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("VACUUM")
 
+async def cleanup_logs(days: int = 3) -> None:
+    """Auto-cleanup logs older than `days`."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM request_logs WHERE created_at < datetime('now', ?)", (f"-{days} days",))
+        await db.commit()
+
 
 async def get_config() -> dict:
     rows = await fetchall("SELECT key, value FROM config")

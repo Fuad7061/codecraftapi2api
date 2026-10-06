@@ -35,17 +35,7 @@ def build_payload(req: dict, cfg: dict) -> dict:
         "model": req.get("model") or cfg["default_model"],
         "messages": req.get("messages", []),
     }
-    temp = req.get("temperature")
-    if temp is None and (cfg.get("default_temperature") or "").strip():
-        temp = float(cfg["default_temperature"])
-    if temp is not None:
-        payload["temperature"] = temp
-    mt = req.get("max_tokens") or req.get("max_completion_tokens")
-    if not mt and (cfg.get("default_max_tokens") or "").strip():
-        mt = int(cfg["default_max_tokens"])
-    if mt:
-        payload["max_tokens"] = mt
-    for k in ("top_p", "frequency_penalty", "presence_penalty", "stop", "seed", "system_prompt"):
+    for k in ("temperature", "system_prompt"):
         if req.get(k) is not None:
             payload[k] = req[k]
     # Codecraft wants the system prompt at root level
@@ -68,6 +58,10 @@ async def _log(cfg, acc, model, stream, status, ms, usage=None, error=None):
         (acc["name"] if acc else None, model, int(stream), status, ms,
          usage.get("prompt_tokens", 0) or 0, usage.get("completion_tokens", 0) or 0, error),
     )
+    import random
+    import asyncio
+    if random.random() < 0.01:
+        asyncio.create_task(db.cleanup_logs())
 
 
 def _err(message: str, status: int) -> JSONResponse:
@@ -122,7 +116,7 @@ async def collect(payload: dict, cfg: dict) -> dict:
     }
 
 
-async def stream_chunks(payload: dict, cfg: dict, acc, resp):
+async def stream_chunks(payload: dict, cfg: dict, acc, resp, include_usage: bool):
     t0 = time.time()
     model = payload["model"]
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
@@ -136,14 +130,12 @@ async def stream_chunks(payload: dict, cfg: dict, acc, resp):
         }) + "\n\n"
 
     try:
-        first = True
+        yield chunk({"role": "assistant"})
         async for d in pool.iter_events(resp):
+            print("RAW UPSTREAM CHUNK:", d)
             if "error" in d:
                 raise pool.UpstreamError(str(d["error"]), 502)
             delta = {}
-            if first:
-                delta["role"] = "assistant"
-                first = False
             if "content" in d:
                 delta["content"] = d["content"]
             if "reasoning" in d:
@@ -156,7 +148,7 @@ async def stream_chunks(payload: dict, cfg: dict, acc, resp):
             if d.get("usage"):
                 usage = d["usage"]
         yield chunk({}, "tool_calls" if had_tools else "stop")
-        if usage:
+        if usage and include_usage:
             yield "data: " + json.dumps({"id": cid, "object": "chat.completion.chunk", "created": created,
                                          "model": model, "choices": [], "usage": usage}) + "\n\n"
     except Exception as e:
@@ -206,8 +198,9 @@ async def chat_completions(request: Request):
     except Exception as e:
         logger.exception("chat error")
         return _err(f"Upstream error: {e}", 502)
+    include_usage = req.get("stream_options", {}).get("include_usage", False)
     return StreamingResponse(
-        stream_chunks(payload, cfg, acc, resp),
+        stream_chunks(payload, cfg, acc, resp, include_usage),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
