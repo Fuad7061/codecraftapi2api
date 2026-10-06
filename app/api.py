@@ -136,16 +136,19 @@ async def stream_chunks(payload: dict, cfg: dict, acc, resp):
         }) + "\n\n"
 
     try:
-        yield chunk({"role": "assistant", "content": ""})
+        first = True
         async for d in pool.iter_events(resp):
-            if d.get("error"):
+            if "error" in d:
                 raise pool.UpstreamError(str(d["error"]), 502)
             delta = {}
-            if d.get("content"):
+            if first:
+                delta["role"] = "assistant"
+                first = False
+            if "content" in d:
                 delta["content"] = d["content"]
-            if d.get("reasoning"):
+            if "reasoning" in d:
                 delta[cfg["reasoning_field"]] = d["reasoning"]
-            if d.get("tool_calls"):
+            if "tool_calls" in d:
                 delta["tool_calls"] = d["tool_calls"]
                 had_tools = True
             if delta:
