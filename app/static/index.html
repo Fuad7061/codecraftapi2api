@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codecraft2API Dashboard</title>
+<meta name="description" content="Manage a pool of Codecraft accounts behind an OpenAI-compatible API">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <div class="brand">⚡ <span>Codecraft2API</span></div>
+    <nav>
+      <button data-tab="overview" class="active">📊 Overview</button>
+      <button data-tab="accounts">👥 Accounts</button>
+      <button data-tab="settings">⚙️ Settings</button>
+      <button data-tab="playground">🧪 Test</button>
+      <button data-tab="logs">📜 Logs</button>
+      <button id="logout-btn">🚪 Logout</button>
+    </nav>
+  </aside>
+  <main>
+    <section id="tab-overview" class="tab active">
+      <h1 class="page-title">Overview</h1>
+      <div class="glass endpoint">
+        <span class="muted">Base URL</span><code id="base-url"></code>
+        <button id="copy-url" class="btn sm">Copy</button>
+      </div>
+      <div class="grid stats" id="stats"></div>
+      <div class="glass card">
+        <h3>Recent requests</h3>
+        <table><thead><tr><th>Time</th><th>Account</th><th>Model</th><th>Status</th><th>ms</th></tr></thead>
+        <tbody id="recent"></tbody></table>
+      </div>
+    </section>
+
+    <section id="tab-accounts" class="tab">
+      <h1 class="page-title">Account pool</h1>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(380px,1fr));margin-bottom:20px">
+        <form id="acc-form" class="glass card">
+          <h3 id="acc-form-title">Add account</h3>
+          <input type="hidden" id="acc-id">
+          <label>Name (optional)</label><input id="acc-name" placeholder="e.g. main">
+          <label>cf_clearance</label><input id="acc-cf" autocomplete="off" placeholder="CF_CLEARANCE">
+          <div class="row">
+            <div><label>remember_web cookie name</label><input id="acc-rn" autocomplete="off" placeholder="remember_web_59ba36..."></div>
+            <div><label>remember_web cookie value</label><input id="acc-rv" autocomplete="off" placeholder="REMEMBER_WEB_VALUE"></div>
+          </div>
+          <label>…or paste the full Cookie header</label>
+          <textarea id="acc-cookie" placeholder="cf_clearance=...; remember_web_xxx=..."></textarea>
+          <div class="hint">Pasting a Cookie header auto-extracts all three constants.</div>
+          <div class="actions">
+            <button id="acc-save" class="btn primary" type="submit">Save account</button>
+            <button id="acc-cancel" class="btn" type="button" hidden>Cancel edit</button>
+          </div>
+        </form>
+        <form id="bulk-form" class="glass card">
+          <h3>Bulk import</h3>
+          <label>One account per line</label>
+          <textarea id="bulk-text" style="min-height:190px" placeholder="name|cf_clearance=...; remember_web_xxx=...&#10;cf_clearance=...; remember_web_yyy=..."></textarea>
+          <div class="hint">Optional <code>name|</code> prefix. Lines without both cookies are skipped.</div>
+          <div class="actions"><button id="bulk-save" class="btn primary" type="submit">Import</button></div>
+        </form>
+      </div>
+      <div class="glass card" style="overflow-x:auto">
+        <div class="actions" style="margin:0 0 10px"><button id="plans-refresh" class="btn sm">Refresh all plans</button></div>
+        <table><thead><tr><th>Name</th><th>Status</th><th>cf_clearance</th><th>Plan tokens</th><th>OK</th><th>Err</th><th>Last error</th><th></th></tr></thead>
+        <tbody id="acc-body"></tbody></table>
+      </div>
+    </section>
+
+    <section id="tab-settings" class="tab">
+      <h1 class="page-title">Settings</h1>
+      <form id="set-form" class="glass card">
+        <label>API keys (one per line / comma-separated — empty = no auth)</label>
+        <div style="display:flex;gap:8px"><textarea id="s-api_keys" style="min-height:70px"></textarea>
+          <button id="gen-key" type="button" class="btn sm" style="align-self:flex-start">Generate</button></div>
+        <div class="row">
+          <div><label>Models exposed (one per line)</label><textarea id="s-models" style="min-height:70px"></textarea></div>
+          <div><label>Default model</label><input id="s-default_model">
+            <label>Account selection strategy</label>
+            <select id="s-strategy"><option value="round_robin">Round-robin</option><option value="random">Random</option><option value="least_used">Least used</option><option value="most_remaining">Most plan tokens remaining</option></select></div>
+        </div>
+        <div class="row">
+          <div><label>Default temperature (empty = auto)</label><input id="s-default_temperature" placeholder="auto"></div>
+          <div><label>Default max_tokens (empty = auto)</label><input id="s-default_max_tokens" placeholder="auto"></div>
+          <div><label>Auto-delete logs after (days, 0 = never)</label><input id="s-log_retention_days"></div>
+          <div><label>Plan tokens refresh (minutes)</label><input id="s-plan_refresh_minutes"></div>
+          <div><label>Request timeout (s)</label><input id="s-request_timeout"></div>
+          <div><label>Disable account after N failures</label><input id="s-max_failures"></div>
+          <div><label>Keep-alive refresh (minutes, 0 = off)</label><input id="s-keepalive_minutes"></div>
+          <div><label>Reasoning field in responses</label>
+            <select id="s-reasoning_field"><option value="reasoning">reasoning</option><option value="reasoning_content">reasoning_content</option></select></div>
+          <div><label>TLS impersonation</label><input id="s-impersonate"></div>
+          <div><label>User-Agent override (must match cf_clearance browser)</label><input id="s-user_agent"></div>
+          <div><label>Outbound proxy (optional)</label><input id="s-proxy" placeholder="http://user:pass@host:port"></div>
+          <div><label>Upstream base URL</label><input id="s-upstream_base"></div>
+          <div><label>Request logging</label><select id="s-enable_logging"><option value="1">Enabled</option><option value="0">Disabled</option></select></div>
+        </div>
+        <div class="actions"><button id="set-save" class="btn primary" type="submit">Save settings</button></div>
+      </form>
+      <form id="pw-form" class="glass card" style="margin-top:20px">
+        <h3>Dashboard password</h3>
+        <label>New password</label><input id="new-pw" type="password" minlength="4">
+        <div class="actions"><button id="pw-save" class="btn" type="submit">Change password</button></div>
+      </form>
+    </section>
+
+    <section id="tab-playground" class="tab">
+      <h1 class="page-title">Test a request</h1>
+      <div class="glass card">
+        <label>Model</label><input id="t-model" placeholder="default">
+        <label>Prompt</label><textarea id="t-prompt">Say hello in one sentence.</textarea>
+        <div class="actions"><button id="t-send" class="btn primary">Send</button></div>
+        <pre id="t-out" hidden></pre>
+      </div>
+    </section>
+
+    <section id="tab-logs" class="tab">
+      <h1 class="page-title">Request logs</h1>
+      <div class="glass card" style="overflow-x:auto">
+        <div class="actions" style="margin:0 0 10px;align-items:center"><button id="logs-refresh" class="btn sm">Refresh</button>
+          <span class="muted">Delete older than</span><input id="logs-days" type="number" min="1" value="3" style="width:70px"><span class="muted">days</span>
+          <button id="logs-old" class="btn sm">Delete old</button>
+          <button id="logs-clear" class="btn sm danger">Delete all</button></div>
+        <table><thead><tr><th>Time</th><th>Account</th><th>Model</th><th>Stream</th><th>Status</th><th>ms</th><th>Tokens</th><th>Error</th></tr></thead>
+        <tbody id="logs-body"></tbody></table>
+      </div>
+    </section>
+  </main>
+</div>
+<div id="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login · Codecraft2API</title>
+<meta name="description" content="Codecraft2API dashboard login">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-body">
+<main class="login-card glass">
+  <div class="logo">⚡</div>
+  <h1>Codecraft2API</h1>
+  <p class="muted">Enter your dashboard password</p>
+  <form id="login-form">
+    <input id="password" type="password" placeholder="Password" autofocus required>
+    <button id="login-btn" class="btn primary" type="submit">Sign in</button>
+    <p id="err" class="error"></p>
+  </form>
+</main>
+<script>
+document.getElementById('login-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const r = await fetch('/login', {method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({password: document.getElementById('password').value})});
+  if (r.ok) location.href = '/'; else document.getElementById('err').textContent = 'Invalid password';
+});
+</script>
+</body>
+</html>
