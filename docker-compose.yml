@@ -2,7 +2,7 @@ services:
   codecraft2api:
     build: .
     ports:
-      - "8000:8000"
+      - "8004:8004"
     environment:
       - API_KEY=${API_KEY:-sk-codecraft-change-me}
       - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD:-admin}

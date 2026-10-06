@@ -11,7 +11,7 @@ OpenAI-compatible gateway for **codecraftapi.com** with an **account pool**, fai
 ## Deploy on Coolify (Hetzner)
 
 1. Push this folder to GitHub.
-2. Coolify → New Resource → Public/Private Repository → Build Pack: **Dockerfile**, port **8000**.
+2. Coolify → New Resource → Public/Private Repository → Build Pack: **Dockerfile**, port **8004**.
 3. **Persistent Storage**: add a volume mounted at `/app/data` (**required** — otherwise accounts are lost on redeploy).
 4. Environment variables (first start only; later managed in dashboard):
    `API_KEY`, `DASHBOARD_PASSWORD`. Optionally `CF_CLEARANCE`, `REMEMBER_WEB_NAME`, `REMEMBER_WEB_VALUE` to seed one account.
@@ -34,5 +34,5 @@ Log into codecraftapi.com, open DevTools → Application → Cookies, copy `cf_c
 
 ```bash
 pip install -r requirements.txt
-DB_PATH=./data/codecraft.db python run.py   # http://localhost:8000
+DB_PATH=./data/codecraft.db python run.py   # http://localhost:8004
 ```

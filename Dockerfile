@@ -4,7 +4,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     HOST=0.0.0.0 \
-    PORT=8000 \
+    PORT=8004 \
     DB_PATH=/app/data/codecraft.db
 
 WORKDIR /app
@@ -21,9 +21,9 @@ COPY run.py .
 RUN mkdir -p /app/data
 VOLUME ["/app/data"]
 
-EXPOSE 8000
+EXPOSE 8004
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')" || exit 1
 
 CMD ["python", "run.py"]

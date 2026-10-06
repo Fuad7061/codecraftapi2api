@@ -12,7 +12,7 @@ load_dotenv()
 
 class Settings:
     HOST: str = os.getenv("HOST", "0.0.0.0")
-    PORT: int = int(os.getenv("PORT", "8000"))
+    PORT: int = int(os.getenv("PORT", "8004"))
     DB_PATH: str = os.getenv("DB_PATH", "/app/data/codecraft.db")
 
     # Seeds (only used when the DB is created for the first time)
