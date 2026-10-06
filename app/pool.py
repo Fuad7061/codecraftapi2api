@@ -192,12 +192,15 @@ async def _post(acc: dict, cfg: dict, payload: dict):
     for attempt in (0, 1):
         s = await ensure_session(acc, cfg, force=(attempt == 1))
         headers = {
-            "accept": "application/json",
+            "accept": "*/*",
             "content-type": "application/json",
             "referer": url,
             "origin": base,
             "x-xsrf-token": _xsrf(s) or "",
             "x-requested-with": "XMLHttpRequest",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-origin",
             **_headers_extra(cfg),
         }
         resp = await s.post(url, headers=headers, json=payload, stream=True)
